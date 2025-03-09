@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Image Classifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: url('https://source.unsplash.com/1600x900/?animals') no-repeat center center fixed;
+            background-size: cover;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white shadow-lg rounded-lg p-8 max-w-md w-full bg-opacity-90">
+        <h1 class="text-3xl font-bold text-gray-800 text-center mb-6">Image Classifier</h1>
+        
+        <form id="uploadForm" class="flex flex-col items-center">
+            <label class="block relative cursor-pointer">
+                <input type="file" id="fileInput" accept="image/*" multiple required class="hidden">
+                <div class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition duration-200">
+                    Choose Files (Max 4)
+                </div>
+            </label>
+            <span id="fileName" class="mt-2 text-sm text-gray-600">No files selected</span>
+            
+            <button
+                type="submit"
+                class="mt-4 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200"
+            >
+                Upload and Classify
+            </button>
+        </form>
+        
+        <div id="loading" class="hidden mt-4 text-center text-gray-600">Processing...</div>
+        <div id="imagePreview" class="mt-4 flex flex-wrap gap-4 justify-center"></div>
+    </div>
+
+    <script>
+        document.getElementById("fileInput").addEventListener("change", function(event) {
+            const files = event.target.files;
+            const fileNameText = files.length ? `${files.length} file(s) selected` : "No files selected";
+            document.getElementById("fileName").textContent = fileNameText;
+            
+            const previewDiv = document.getElementById("imagePreview");
+            previewDiv.innerHTML = "";
+            
+            Array.from(files).slice(0, 4).forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const container = document.createElement("div");
+                    container.className = "flex flex-col items-center";
+                    
+                    const img = document.createElement("img");
+                    img.src = e.target.result;
+                    img.className = "w-32 h-32 object-cover rounded-lg border border-gray-300";
+                    
+                    const resultText = document.createElement("p");
+                    resultText.id = `result-${index}`;
+                    resultText.className = "text-gray-700 mt-2 text-center text-sm font-semibold";
+                    
+                    const probabilitiesList = document.createElement("ul");
+                    probabilitiesList.id = `probabilities-${index}`;
+                    probabilitiesList.className = "text-gray-600 text-xs text-center mt-1";
+                    
+                    container.appendChild(img);
+                    container.appendChild(resultText);
+                    container.appendChild(probabilitiesList);
+                    previewDiv.appendChild(container);
+                };
+                reader.readAsDataURL(file);
+            });
+        });
+
+        document.getElementById("uploadForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            const fileInput = document.getElementById("fileInput");
+            const loadingDiv = document.getElementById("loading");
+            const previewDiv = document.getElementById("imagePreview");
+
+            if (!fileInput.files.length) {
+                alert("Please select image files.");
+                return;
+            }
+            
+            loadingDiv.classList.remove("hidden");
+            
+            const formData = new FormData();
+            Array.from(fileInput.files).slice(0, 4).forEach(file => {
+                formData.append("files", file);
+            });
+
+            try {
+                const response = await fetch("http://localhost:5000/predict", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                data.predictions.forEach((prediction, index) => {
+                    const resultText = document.getElementById(`result-${index}`);
+                    resultText.innerHTML = `<span class='text-green-600 font-bold'>${prediction.predicted_class}</span>`;
+                    
+                    const probabilitiesList = document.getElementById(`probabilities-${index}`);
+                    probabilitiesList.innerHTML = "";
+                    Object.entries(prediction.probabilities).forEach(([className, prob]) => {
+                        const listItem = document.createElement("li");
+                        listItem.innerHTML = `<span class='font-semibold'>${className}</span>: ${(prob * 100).toFixed(2)}%`;
+                        probabilitiesList.appendChild(listItem);
+                    });
+                });
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            } finally {
+                loadingDiv.classList.add("hidden");
+            }
+        });
+    </script>
+</body>
+</html>
